@@ -1,0 +1,31 @@
+{
+	"name": "landrop.backend",
+	"version": "1.0.0",
+	"type": "module",
+	"description": "",
+	"main": "server.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"dev": "nodemon server",
+		"start": "node server"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Eden-Lamar/LANDrop.Backend.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/Eden-Lamar/LANDrop.Backend/issues"
+	},
+	"homepage": "https://github.com/Eden-Lamar/LANDrop.Backend#readme",
+	"dependencies": {
+		"@fastify/cors": "^11.3.0",
+		"@fastify/websocket": "^11.3.3",
+		"better-sqlite3": "^13.0.3",
+		"bonjour-service": "^1.4.4",
+		"fastify": "^5.12.5",
+		"pino-pretty": "^13.2.0"
+	}
+}
