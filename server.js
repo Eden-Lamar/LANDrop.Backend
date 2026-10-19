@@ -4,6 +4,7 @@ import websocket from '@fastify/websocket';
 import { Bonjour } from 'bonjour-service';
 import db from './db.js'; // Importing this ensures the tables are created on startup
 import websocketRoutes from './ws.js';
+import transferRoutes from './transfer.js';
 
 // Initialize Fastify with pretty logging
 const fastify = Fastify({
@@ -15,12 +16,18 @@ const fastify = Fastify({
 	}
 });
 
+// Tell Fastify to allow raw binary streams without consuming them into memory
+fastify.addContentTypeParser('application/octet-stream', function (request, payload, done) {
+	done(null); // We pass null because we handle `request.raw` directly in our pipeline
+});
+
 // Register plugins
 await fastify.register(cors, { origin: '*' }); // Allows our React app to connect
 await fastify.register(websocket); // Enables WebSocket support
 
 // Register our new WebSocket routes
 await fastify.register(websocketRoutes);
+await fastify.register(transferRoutes);
 
 // Initialize Bonjour (mDNS)
 const bonjour = new Bonjour();
