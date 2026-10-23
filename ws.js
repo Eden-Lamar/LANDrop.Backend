@@ -27,16 +27,38 @@ const registerSchema = ajv.compile({
 	}
 });
 
+// const transferRequestSchema = ajv.compile({
+// 	type: 'object',
+// 	required: ['type', 'receiverId', 'filename', 'size'],
+// 	additionalProperties: false,
+// 	properties: {
+// 		type: { type: 'string', const: 'transfer:request' },
+// 		receiverId: { type: 'string', minLength: 10 },
+// 		filename: { type: 'string', minLength: 1, maxLength: 255 },
+// 		size: { type: 'integer', minimum: 0 },
+// 		sha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' } // Optional for now
+// 	}
+// });
+
 const transferRequestSchema = ajv.compile({
 	type: 'object',
-	required: ['type', 'receiverId', 'filename', 'size'],
+	required: ['type', 'receiverId', 'files'],
 	additionalProperties: false,
 	properties: {
 		type: { type: 'string', const: 'transfer:request' },
 		receiverId: { type: 'string', minLength: 10 },
-		filename: { type: 'string', minLength: 1, maxLength: 255 },
-		size: { type: 'integer', minimum: 0 },
-		sha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' } // Optional for now
+		files: {
+			type: 'array',
+			minItems: 1,
+			items: {
+				type: 'object',
+				required: ['name', 'size'],
+				properties: {
+					name: { type: 'string', minLength: 1, maxLength: 255 },
+					size: { type: 'integer', minimum: 0 }
+				}
+			}
+		}
 	}
 });
 
@@ -173,20 +195,22 @@ export default async function websocketRoutes(fastify, options) {
 
 					// 1. Generate transfer ID
 					const transferId = crypto.randomUUID();
+					const totalSize = parsed.files.reduce((acc, f) => acc + f.size, 0);
 
 					// 2. Log it as PENDING in the state machine
 					const stmt = db.prepare(`
             INSERT INTO transfers (id, sender_id, receiver_id, filename, size, status, expected_hash)
-            VALUES (@id, @sender, @receiver, @filename, @size, 'PENDING', @hash)
+            VALUES (@id, @sender, @receiver, @filename, @size, 'PENDING', null)
           `);
 
+					// Store the array as a string in the DB to avoid migrations
 					stmt.run({
 						id: transferId,
 						sender: currentDeviceId,
 						receiver: parsed.receiverId,
-						filename: parsed.filename,
-						size: parsed.size,
-						hash: parsed.sha256 || null
+						filename: JSON.stringify(parsed.files),
+						size: totalSize,
+						// hash: parsed.sha256 || null
 					});
 
 					// Notify SENDER
@@ -194,8 +218,8 @@ export default async function websocketRoutes(fastify, options) {
 						type: 'transfer:pending',
 						transferId,
 						receiverId: parsed.receiverId,
-						filename: parsed.filename,
-						size: parsed.size
+						files: parsed.files,
+						totalSize
 					}));
 
 					// Notify RECEIVER
@@ -203,9 +227,9 @@ export default async function websocketRoutes(fastify, options) {
 						type: 'transfer:request',
 						transferId,
 						senderId: currentDeviceId,
-						filename: parsed.filename,
-						size: parsed.size,
-						sha256: parsed.sha256 || null
+						files: parsed.files,
+						totalSize
+						// sha256: parsed.sha256 || null
 					}));
 
 				} else if (['transfer:accept', 'transfer:reject', 'transfer:ready'].includes(parsed.type)) {
