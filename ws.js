@@ -61,6 +61,18 @@ const clipboardSendSchema = ajv.compile({
 	}
 });
 
+const webrtcSignalSchema = ajv.compile({
+	type: 'object',
+	required: ['type', 'targetId', 'payload'],
+	additionalProperties: false,
+	properties: {
+		type: { type: 'string', enum: ['webrtc:offer', 'webrtc:answer', 'webrtc:ice-candidate'] },
+		targetId: { type: 'string', minLength: 10 },
+		payload: { type: 'object' }, // Holds the SDP or ICE candidate data
+		transferId: { type: 'string' }
+	}
+});
+
 // Explicit mapping to keep the WebSocket protocol clean
 const eventByStatus = {
 	ACCEPTED: 'transfer:accepted',
@@ -251,6 +263,25 @@ export default async function websocketRoutes(fastify, options) {
 						receiverId: parsed.receiverId
 					}));
 
+				} else if (['webrtc:offer', 'webrtc:answer', 'webrtc:ice-candidate'].includes(parsed.type)) {
+					// Validate the WebRTC signal payload
+					if (!webrtcSignalSchema(parsed)) {
+						return ws.send(JSON.stringify({ type: 'error', message: formatAjvError(webrtcSignalSchema) }));
+					}
+
+					// Ensure the target is online
+					const targetSocket = activeConnections.get(parsed.targetId);
+					if (!targetSocket || targetSocket.readyState !== 1) {
+						return ws.send(JSON.stringify({ type: 'error', message: 'Target device is offline or unreachable' }));
+					}
+
+					// Forward the exact payload to the target, attaching the sender's ID so they know who it's from
+					targetSocket.send(JSON.stringify({
+						type: parsed.type,
+						senderId: currentDeviceId,
+						payload: parsed.payload,
+						transferId: parsed.transferId
+					}));
 				} else {
 					// UPDATE: Trap unknown event types to help debug the client
 					ws.send(JSON.stringify({
