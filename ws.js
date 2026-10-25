@@ -62,6 +62,15 @@ const transferRequestSchema = ajv.compile({
 	}
 });
 
+const transferControlSchema = ajv.compile({
+	type: 'object',
+	required: ['type', 'targetId'],
+	properties: {
+		type: { type: 'string', enum: ['transfer:pause', 'transfer:resume', 'transfer:cancel'] },
+		targetId: { type: 'string', minLength: 10 }
+	}
+});
+
 const transferResponseSchema = ajv.compile({
 	type: 'object',
 	required: ['type', 'transferId'],
@@ -306,6 +315,16 @@ export default async function websocketRoutes(fastify, options) {
 						payload: parsed.payload,
 						transferId: parsed.transferId
 					}));
+				} else if (['transfer:pause', 'transfer:resume', 'transfer:cancel'].includes(parsed.type)) {
+					if (!transferControlSchema(parsed)) return;
+
+					const targetSocket = activeConnections.get(parsed.targetId);
+					if (targetSocket && targetSocket.readyState === 1) {
+						targetSocket.send(JSON.stringify({
+							type: parsed.type,
+							senderId: currentDeviceId
+						}));
+					}
 				} else {
 					// UPDATE: Trap unknown event types to help debug the client
 					ws.send(JSON.stringify({
